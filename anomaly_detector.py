@@ -1,6 +1,6 @@
 # anomaly_detector.py
 # Network Anomaly Detector
-# Day 2: Added port scan detection logic
+# Day 3: Added off-hours access detection logic
 
 import csv
 from datetime import datetime
@@ -90,9 +90,53 @@ def detect_port_scans(records):
             anomalies.append({
                 "type": "PORT SCAN",
                 "src_ip": src_ip,
+                "dst_ip": "Multiple",
+                "timestamp": "Multiple",
                 "detail": f"Connected to {len(ports)} unique ports: "
                           f"{sorted(ports)}",
                 "severity": "HIGH"
+            })
+
+    return anomalies
+
+
+# ─────────────────────────────────────────
+# Detection: Off-Hours Access
+# ─────────────────────────────────────────
+
+def detect_off_hours_access(records):
+    """
+    Detect network connections made outside of business hours.
+    Business hours are defined in configuration as 08:00 - 18:00.
+    Any connection outside this window is flagged as suspicious.
+    Returns a list of anomaly dicts.
+    """
+    anomalies = []
+
+    for record in records:
+        hour = record["timestamp"].hour
+
+        # Check if connection falls outside business hours
+        # Flags connections before OFF_HOURS_END or after OFF_HOURS_START
+        is_off_hours = (
+            hour >= OFF_HOURS_START or hour < OFF_HOURS_END
+        )
+
+        if is_off_hours:
+            anomalies.append({
+                "type": "OFF-HOURS ACCESS",
+                "src_ip": record["src_ip"],
+                "dst_ip": record["dst_ip"],
+                "timestamp": record["timestamp"].strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "detail": f"Connection detected at "
+                          f"{record['timestamp'].strftime('%H:%M')} "
+                          f"— outside business hours "
+                          f"({OFF_HOURS_END:02d}:00 - "
+                          f"{OFF_HOURS_START:02d}:00) "
+                          f"on port {record['dst_port']}",
+                "severity": "MEDIUM"
             })
 
     return anomalies
@@ -105,6 +149,7 @@ def detect_port_scans(records):
 def print_anomalies(anomalies):
     """
     Display detected anomalies in a formatted terminal output.
+    Includes a summary count of total anomalies detected.
     """
     print("\n" + "="*60)
     print("        NETWORK ANOMALY DETECTION REPORT")
@@ -116,6 +161,8 @@ def print_anomalies(anomalies):
         for anomaly in anomalies:
             print(f"\n[🔴 {anomaly['severity']}] {anomaly['type']}")
             print(f"  Source IP : {anomaly['src_ip']}")
+            print(f"  Dest IP   : {anomaly['dst_ip']}")
+            print(f"  Time      : {anomaly['timestamp']}")
             print(f"  Detail    : {anomaly['detail']}")
 
     print(f"\n{'='*60}")
@@ -132,10 +179,18 @@ if __name__ == "__main__":
     records = load_traffic_log("sample_data/sample_traffic.csv")
 
     if records:
+        all_anomalies = []
+
         # Run port scan detection
         print("\n[*] Running port scan detection...")
-        anomalies = detect_port_scans(records)
+        port_scan_anomalies = detect_port_scans(records)
+        all_anomalies.extend(port_scan_anomalies)
 
-        # Display results
-        print_anomalies(anomalies)
+        # Run off-hours access detection
+        print("[*] Running off-hours access detection...")
+        off_hours_anomalies = detect_off_hours_access(records)
+        all_anomalies.extend(off_hours_anomalies)
+
+        # Display all results
+        print_anomalies(all_anomalies)
 ```

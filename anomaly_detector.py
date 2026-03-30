@@ -1,6 +1,6 @@
 # anomaly_detector.py
 # Network Anomaly Detector
-# Day 3: Added off-hours access detection logic
+# Day 4: Added large data transfer detection logic
 
 import csv
 from datetime import datetime
@@ -143,6 +143,47 @@ def detect_off_hours_access(records):
 
 
 # ─────────────────────────────────────────
+# Detection: Large Data Transfer
+# ─────────────────────────────────────────
+
+def detect_large_transfers(records):
+    """
+    Detect unusually large data transfers that may indicate
+    data exfiltration or unauthorised bulk data movement.
+    Flags any single connection that transfers more bytes than
+    the LARGE_TRANSFER_THRESHOLD defined in configuration.
+    Returns a list of anomaly dicts.
+    """
+    anomalies = []
+
+    for record in records:
+        bytes_transferred = record["bytes_transferred"]
+
+        # Flag if transfer size exceeds defined threshold
+        if bytes_transferred >= LARGE_TRANSFER_THRESHOLD:
+
+            # Convert bytes to human readable format
+            size_gb = bytes_transferred / (1024 ** 3)
+
+            anomalies.append({
+                "type": "LARGE DATA TRANSFER",
+                "src_ip": record["src_ip"],
+                "dst_ip": record["dst_ip"],
+                "timestamp": record["timestamp"].strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                "detail": f"Transferred {size_gb:.2f} GB "
+                          f"({bytes_transferred:,} bytes) "
+                          f"to {record['dst_ip']} "
+                          f"on port {record['dst_port']} "
+                          f"via {record['protocol']}",
+                "severity": "CRITICAL"
+            })
+
+    return anomalies
+
+
+# ─────────────────────────────────────────
 # Print anomalies to terminal
 # ─────────────────────────────────────────
 
@@ -150,6 +191,7 @@ def print_anomalies(anomalies):
     """
     Display detected anomalies in a formatted terminal output.
     Includes a summary count of total anomalies detected.
+    Groups anomalies by severity for easier triage.
     """
     print("\n" + "="*60)
     print("        NETWORK ANOMALY DETECTION REPORT")
@@ -158,15 +200,30 @@ def print_anomalies(anomalies):
     if not anomalies:
         print("\n[✓] No anomalies detected.")
     else:
-        for anomaly in anomalies:
-            print(f"\n[🔴 {anomaly['severity']}] {anomaly['type']}")
+        # Sort anomalies by severity for easier triage
+        severity_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        sorted_anomalies = sorted(
+            anomalies,
+            key=lambda x: severity_order.get(x["severity"], 99)
+        )
+
+        for anomaly in sorted_anomalies:
+            # Use different icons per severity level
+            icon = "🔴" if anomaly["severity"] in ["CRITICAL", "HIGH"] else "🟡"
+            print(f"\n[{icon} {anomaly['severity']}] {anomaly['type']}")
             print(f"  Source IP : {anomaly['src_ip']}")
             print(f"  Dest IP   : {anomaly['dst_ip']}")
             print(f"  Time      : {anomaly['timestamp']}")
             print(f"  Detail    : {anomaly['detail']}")
 
+    # Severity summary breakdown
+    critical = len([a for a in anomalies if a["severity"] == "CRITICAL"])
+    high = len([a for a in anomalies if a["severity"] == "HIGH"])
+    medium = len([a for a in anomalies if a["severity"] == "MEDIUM"])
+
     print(f"\n{'='*60}")
     print(f"  SUMMARY: {len(anomalies)} anomaly(s) detected")
+    print(f"  🔴 CRITICAL: {critical} | HIGH: {high} | 🟡 MEDIUM: {medium}")
     print("="*60 + "\n")
 
 
@@ -181,15 +238,18 @@ if __name__ == "__main__":
     if records:
         all_anomalies = []
 
-        # Run port scan detection
+        # Run all detection modules
         print("\n[*] Running port scan detection...")
         port_scan_anomalies = detect_port_scans(records)
         all_anomalies.extend(port_scan_anomalies)
 
-        # Run off-hours access detection
         print("[*] Running off-hours access detection...")
         off_hours_anomalies = detect_off_hours_access(records)
         all_anomalies.extend(off_hours_anomalies)
+
+        print("[*] Running large transfer detection...")
+        large_transfer_anomalies = detect_large_transfers(records)
+        all_anomalies.extend(large_transfer_anomalies)
 
         # Display all results
         print_anomalies(all_anomalies)

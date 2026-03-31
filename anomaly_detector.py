@@ -1,6 +1,6 @@
 # anomaly_detector.py
 # Network Anomaly Detector
-# Day 4: Added large data transfer detection logic
+# Day 5: Added CSV report generation and finalized all detection modules
 
 import csv
 from datetime import datetime
@@ -184,14 +184,47 @@ def detect_large_transfers(records):
 
 
 # ─────────────────────────────────────────
+# Save report to CSV
+# ─────────────────────────────────────────
+
+def save_report(anomalies, filename=None):
+    """
+    Export detected anomalies to a timestamped CSV report file.
+    If no filename is provided, one is auto-generated with
+    the current timestamp.
+    """
+    if not anomalies:
+        print("[WARNING] No anomalies to save.")
+        return
+
+    # Auto-generate filename if not provided
+    if not filename:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"anomaly_report_{timestamp}.csv"
+
+    fieldnames = [
+        "type", "severity", "src_ip",
+        "dst_ip", "timestamp", "detail"
+    ]
+
+    with open(filename, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for anomaly in anomalies:
+            writer.writerow(anomaly)
+
+    print(f"[✓] Report saved: {filename}")
+
+
+# ─────────────────────────────────────────
 # Print anomalies to terminal
 # ─────────────────────────────────────────
 
 def print_anomalies(anomalies):
     """
     Display detected anomalies in a formatted terminal output.
-    Includes a summary count of total anomalies detected.
-    Groups anomalies by severity for easier triage.
+    Anomalies are sorted by severity (CRITICAL → HIGH → MEDIUM → LOW).
+    Includes a severity breakdown in the summary.
     """
     print("\n" + "="*60)
     print("        NETWORK ANOMALY DETECTION REPORT")
@@ -251,6 +284,8 @@ if __name__ == "__main__":
         large_transfer_anomalies = detect_large_transfers(records)
         all_anomalies.extend(large_transfer_anomalies)
 
-        # Display all results
+        # Display results in terminal
         print_anomalies(all_anomalies)
-```
+
+        # Save results to CSV report
+        save_report(all_anomalies)
